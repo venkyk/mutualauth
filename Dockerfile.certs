@@ -1,0 +1,45 @@
+FROM debian:sid-slim
+RUN apt-get update -y && \
+  apt-get install -y openssl
+
+RUN mkdir -p /certs
+WORKDIR /certs
+
+# step 1 - create the root CA certificate
+RUN mkdir -p ca/private
+RUN openssl req \
+       -newkey rsa:2048 -nodes -keyout ca/private/ca.key \
+       -subj '/CN=root/O=MegaCorp Inc/C=US' \
+       -x509 -days 365 -out ca/ca.crt
+
+RUN openssl x509 -noout -text -in ca/ca.crt
+
+# step 2 - create the server key and the CSR
+RUN mkdir -p server/private
+RUN openssl req \
+       -subj '/CN=server.com/O=MegaCorp Inc/C=US' \
+       -newkey rsa:2048 -nodes -keyout server/private/server.com.key \
+       -out server/server.com.csr
+
+# step 3 - Use the root CA to sign the server CSR
+RUN openssl x509 -req -days 365 -sha256 -in server/server.com.csr -CA ca/ca.crt -CAkey ca/private/ca.key -set_serial 1 -out server/server.com.crt
+
+# Verify the server cert
+RUN openssl x509 -noout -text -in server/server.com.crt
+RUN openssl verify -CAfile ca/ca.crt server/server.com.crt
+
+# step 4 - create the client key and the CSR
+RUN mkdir -p client/private
+RUN openssl req \
+       -subj '/CN=client.com/O=MegaCorp Inc/C=US' \
+       -newkey rsa:2048 -nodes -keyout client/private/client.com.key \
+       -out client/client.com.csr
+
+# step 5 - Use the root CA to sign the client CSR
+RUN openssl x509 -req -days 365 -sha256 -in client/client.com.csr -CA ca/ca.crt -CAkey ca/private/ca.key -set_serial 2 -out client/client.com.crt
+
+# Verify the client cert
+RUN openssl x509 -noout -text -in client/client.com.crt
+RUN openssl verify -CAfile ca/ca.crt client/client.com.crt
+
+CMD /bin/bash
